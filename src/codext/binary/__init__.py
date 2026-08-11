@@ -6,3 +6,4 @@ from .gray import *
 from .manchester import *
 from .rotate import *
 
+from . import decabit

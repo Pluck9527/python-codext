@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """Regression tests for the CTF-oriented codecs."""
+import json
 from unittest import TestCase
 
 from codext.__common__ import codecs
@@ -66,3 +67,57 @@ class TestCtfCodecs(TestCase):
         self.assertEqual(self.roundtrip("HELLOWORLD", "enigma"), "ILBDAAMTAZ")
         encoding = "enigma-iv.ii.i-c-lfp-hrq-hr.qp.fz.sw.eu"
         self.assertEqual(self.roundtrip("HELLOWORLD", encoding), "CTTOJBSHRV")
+
+    def test_quoted_printable_and_unicode_escape(self):
+        self.assertEqual(self.roundtrip("flag{中文}", "quoted-printable"),
+                         "flag{=E4=B8=AD=E6=96=87}")
+        self.assertEqual(self.roundtrip("flag{中文}", "unicode-escape"),
+                         r"flag{\u4e2d\u6587}")
+        self.assertEqual(codecs.decode(r"\u4e2d+U6587 &#x1F600;", "unicode-escape"), "中文 😀")
+
+    def test_text_encoding_bruteforce_and_mojibake(self):
+        candidates = json.loads(codecs.decode("涓枃", "text-encoding-brute-force"))
+        self.assertEqual(candidates[0]["text"], "中文")
+        self.assertIn("中文", [candidate["text"] for candidate in candidates])
+        self.assertEqual(codecs.decode("涓枃", "mojibake-gbk"), "中文")
+        self.assertEqual(codecs.decode("锟斤拷", "mojibake-gbk"), "��")
+
+    def test_brainfuck_and_ook(self):
+        self.roundtrip("flag", "brainfuck")
+        self.roundtrip("flag", "ook")
+        self.roundtrip("flag", "short-ook")
+        self.assertEqual(codecs.decode("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.", "brainfuck"), "A")
+        self.assertEqual(codecs.decode(",.", "brainfuck"), "\x00")
+
+    def test_aaencode(self):
+        encoded = self.roundtrip("console.log('中文😀')", "aaencode")
+        self.assertTrue(encoded.startswith("ﾟωﾟﾉ="))
+        self.assertTrue(encoded.endswith("(ﾟДﾟ)[ﾟoﾟ]) (ﾟΘﾟ)) ('_');"))
+
+    def test_decabit(self):
+        self.assertEqual(self.roundtrip("DECA", "decabit"),
+                         "-+-++++--- ++-+--+-+- +--++++--- ++-+++----")
+
+    def test_sms_pdu(self):
+        expected = "0001000B813108108300F000080C4F60597D0066006C00610067"
+        self.assertEqual(codecs.encode("你好flag", "sms-pdu-13800138000"), expected)
+        self.assertEqual(codecs.decode(expected, "sms-pdu"), "你好flag")
+        guide = ("0001000D91683106019196F400087200380039003500300034004500340037003000440030004100310041003000410030"
+                 "003000300030003000300030004400340039003400380034003400350032003000300030003000300030003400370030"
+                 "00300030003000300030003800300038003000320030003000300030")
+        self.assertTrue(codecs.decode(guide, "sms-pdu").startswith("89504E470D0A1A0A"))
+
+    def test_differential_manchester(self):
+        self.assertEqual(self.roundtrip("A", "differential-manchester"), "1001010101010110")
+        self.roundtrip("flag", "differential-manchester-inverted")
+        self.assertRaises(ValueError, codecs.decode, "00" * 8, "differential-manchester")
+
+    def test_snow(self):
+        encoded = self.roundtrip("flag{SNOW}", "snow")
+        self.assertIn("\t", encoded)
+        self.roundtrip("this is a compressed flag", "snow-compressed")
+
+    def test_whitespace_language(self):
+        encoded = self.roundtrip("flag{ws}", "whitespace-lang")
+        self.assertEqual(set(encoded), {" ", "\t", "\n"})
+        self.roundtrip("flag", "whitespace")

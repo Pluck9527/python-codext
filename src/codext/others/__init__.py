@@ -9,3 +9,7 @@ from .chinese_telegraph import *
 from .core_values import *
 from .pgp_words import *
 from .xxencode import *
+from . import aaencode
+from . import brainfuck
+from . import text_formats
+from . import sms_pdu
