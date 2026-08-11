@@ -5,3 +5,7 @@ from .letters import *
 from .markdown import *
 from .uuencode import *
 
+from .chinese_telegraph import *
+from .core_values import *
+from .pgp_words import *
+from .xxencode import *

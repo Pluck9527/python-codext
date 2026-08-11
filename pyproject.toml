@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
   "legacycrypt; python_version >= '3.13'",
   "markdown2>=2.5.4",
+  "zhtelecode==0.1.0",
 ]
 dynamic = ["version"]
 
@@ -76,3 +77,6 @@ base100 = "codext.base.base100:main100"
 base122 = "codext.base.base122:main122"
 codext = "codext.__init__:main"
 unbase = "codext.base.__init__:main"
+
+[tool.setuptools.package-data]
+codext = ["VERSION.txt", "macros.json", "others/pgp_word_list.json"]

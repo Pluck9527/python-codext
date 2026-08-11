@@ -14,3 +14,5 @@ from .shift import *
 from .vic import *
 from .vigenere import *
 from .xor import *
+from .ctf_classical import *
+from .enigma import *
