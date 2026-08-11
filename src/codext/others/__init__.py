@@ -13,3 +13,6 @@ from . import aaencode
 from . import brainfuck
 from . import text_formats
 from . import sms_pdu
+from . import keyboards
+from . import chinese_niche
+from . import vbe

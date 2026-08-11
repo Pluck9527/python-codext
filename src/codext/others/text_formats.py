@@ -50,26 +50,35 @@ def text_encoding_bruteforce_decode(text, errors="strict"):
     value = ensure_str(text)
     sources = ("latin1", "cp1252", "gb18030", "big5", "shift_jis")
     targets = ("utf-8", "gb18030", "big5", "shift_jis", "euc_kr", "cp1252", "latin1")
-    candidates = []
+    candidates, queue = [], [(value, [], 0)]
     seen = {value}
-    for source in sources:
-        for target in targets:
-            if source == target:
-                continue
-            try:
-                candidate = value.encode(source).decode(target)
-            except (UnicodeEncodeError, UnicodeDecodeError):
-                continue
-            if candidate in seen:
-                continue
-            seen.add(candidate)
-            controls = sum(ord(char) < 32 and char not in "\r\n\t" for char in candidate)
-            replacements = candidate.count("�")
-            readable = sum(char.isprintable() or char in "\r\n\t" for char in candidate)
-            score = round(readable / max(len(candidate), 1) - controls - replacements +
-                          (0.05 if target == "utf-8" else 0), 4)
-            candidates.append({"source": source, "target": target, "score": score, "text": candidate})
-    result = json.dumps(sorted(candidates, key=lambda item: (-item["score"], item["source"], item["target"])),
+    while queue and len(candidates) < 256:
+        current, path, depth = queue.pop(0)
+        if depth == 3:
+            continue
+        for source in sources:
+            for target in targets:
+                if source == target:
+                    continue
+                try:
+                    candidate = current.encode(source).decode(target)
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    continue
+                if candidate in seen:
+                    continue
+                seen.add(candidate)
+                route = path + ["%s->%s" % (source, target)]
+                controls = sum(ord(char) < 32 and char not in "\r\n\t" for char in candidate)
+                replacements = candidate.count("�")
+                private = sum(0xe000 <= ord(char) <= 0xf8ff for char in candidate)
+                readable = sum(char.isprintable() or char in "\r\n\t" for char in candidate)
+                markers = sum(candidate.count(marker) for marker in ("Ã", "Â", "锟", "æ", "ï¿½"))
+                score = round(readable / max(len(candidate), 1) - controls - replacements - private * .2 -
+                              markers * .03 + (0.08 if target == "utf-8" else 0) - depth * .01, 4)
+                candidates.append({"source": source, "target": target, "depth": depth + 1,
+                                   "path": route, "score": score, "text": candidate})
+                queue.append((candidate, route, depth + 1))
+    result = json.dumps(sorted(candidates, key=lambda item: (-item["score"], item["depth"], item["path"])),
                         ensure_ascii=False, indent=2)
     return result, len(value)
 

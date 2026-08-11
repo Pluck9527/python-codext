@@ -10,3 +10,5 @@ from .base64_stego import *
 from .zero_width import *
 from . import whitespace_lang
 from . import snow
+from . import twitter_secret
+from . import spammimic

@@ -4,24 +4,27 @@ import re
 
 from ..__common__ import add, b, ensure_str
 from .snow_huffman import CODES
+from .snow_ice import cfb_bits
 
 
-def _snow_bits(text, compressed):
+def _snow_bits(text, compressed, password=""):
     data = b(text)
     if compressed:
-        return "".join(CODES[byte] for byte in data)
-    return "".join(format(byte, "08b") for byte in data)
+        bits = "".join(CODES[byte] for byte in data)
+    else:
+        bits = "".join(format(byte, "08b") for byte in data)
+    return cfb_bits(bits, password)
 
 
-def snow_encode(compressed=False):
+def snow_encode(compressed=False, password=""):
     def encode(text, errors="strict"):
-        bits = _snow_bits(text, compressed)
+        bits = _snow_bits(text, compressed, password)
         bits += "0" * (-len(bits) % 3)
         lines = []
         for index in range(0, len(bits), 3):
             value = int(bits[index:index + 3], 2)
             spaces = ((value & 1) << 2) | (value & 2) | ((value & 4) >> 2)
-            marker = "\t" if index == 0 or spaces == 0 else ""
+            marker = ("\t" if index == 0 else "") + ("\t" if spaces == 0 else "")
             lines.append("SNOW" + marker + " " * spaces)
         result = "\n".join(lines) + ("\n" if lines else "")
         return result, len(b(text))
@@ -58,9 +61,9 @@ def _extract_bits(text):
     return bits
 
 
-def snow_decode(compressed=False):
+def snow_decode(compressed=False, password=""):
     def decode(text, errors="strict"):
-        bits = _extract_bits(text)
+        bits = cfb_bits(_extract_bits(text), password, True)
         if compressed:
             inverse, pending, output = {code: byte for byte, code in enumerate(CODES)}, "", bytearray()
             prefixes = {code[:length] for code in CODES for length in range(1, len(code) + 1)}
@@ -80,3 +83,15 @@ def snow_decode(compressed=False):
 add("snow", snow_encode(False), snow_decode(False), r"^(?:snow|stegsnow)$")
 add("snow_compressed", snow_encode(True), snow_decode(True),
     r"^(?:snow[-_]?(?:compressed|compress|c)|stegsnow[-_]?c)$", aliases=["snow-compressed"])
+
+
+def snow_password_encode(compressed="", password=""):
+    return snow_encode(bool(compressed), bytes.fromhex(str(password)[1:]))
+
+
+def snow_password_decode(compressed="", password=""):
+    return snow_decode(bool(compressed), bytes.fromhex(str(password)[1:]))
+
+
+add("snow_password", snow_password_encode, snow_password_decode,
+    r"^snow(?:[-_](compressed))?[-_]p[-_](h(?:[0-9a-fA-F]{2})+)$", aliases=["snow-password"])

@@ -24,6 +24,17 @@ reset()
 from .base.baseN import add_custom_base64
 __all__.append("add_custom_base64")
 
+from .crypto.modern import add_symmetric_codec
+from .crypto.keyed_vigenere import add_vigenere_codec
+from .crypto.sm import add_sm2_codec, generate_sm2_keypair
+from .crypto.substitution import frequency_report, solve_substitution
+from .stegano.twitter_secret import hide_twitter_secret, reveal_twitter_secret
+from .stegano.whitespace_lang import run_whitespace
+from .others.vbe import decode_vbe_payload
+__all__.extend(["add_symmetric_codec", "add_vigenere_codec", "add_sm2_codec", "generate_sm2_keypair", "frequency_report",
+                "solve_substitution", "hide_twitter_secret", "reveal_twitter_secret", "run_whitespace",
+                "decode_vbe_payload"])
+
 
 # populate codext with attributes from codecs that were not modified
 for attr in codecs.__all__:

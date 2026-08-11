@@ -26,8 +26,11 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+  "gmssl>=3.2.2",
   "legacycrypt; python_version >= '3.13'",
   "markdown2>=2.5.4",
+  "pycryptodome>=3.23",
+  "pypinyin>=0.55",
   "zhtelecode==0.1.0",
 ]
 dynamic = ["version"]

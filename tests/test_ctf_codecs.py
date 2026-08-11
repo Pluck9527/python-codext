@@ -4,7 +4,9 @@
 import json
 from unittest import TestCase
 
+import codext
 from codext.__common__ import codecs
+from codext.crypto.emoji_aes import BASE64_ALPHABET, EMOJIS
 
 
 class TestCtfCodecs(TestCase):
@@ -39,6 +41,12 @@ class TestCtfCodecs(TestCase):
 
     def test_gronsfeld(self):
         self.assertEqual(self.roundtrip("HELLO", "gronsfeld-31415"), "KFPMT")
+
+    def test_vigenere_url_key(self):
+        encoding = "vigenere-key-h" + "http://www.verymuch.net".encode().hex()
+        self.roundtrip("ATTACK AT DAWN", encoding)
+        codext.add_vigenere_codec("vigenere-url-test", "http://www.verymuch.net")
+        self.roundtrip("flag{url_key}", "vigenere-url-test")
 
     def test_cloud_shadow(self):
         self.assertEqual(self.roundtrip("FLAG", "cloud-shadow"), "42084010421")
@@ -81,6 +89,9 @@ class TestCtfCodecs(TestCase):
         self.assertIn("中文", [candidate["text"] for candidate in candidates])
         self.assertEqual(codecs.decode("涓枃", "mojibake-gbk"), "中文")
         self.assertEqual(codecs.decode("锟斤拷", "mojibake-gbk"), "��")
+        recursive = json.loads(codecs.decode("æµè¯", "text-encoding-brute-force"))
+        self.assertEqual(recursive[0]["text"], "测试")
+        self.assertEqual(recursive[0]["depth"], 1)
 
     def test_brainfuck_and_ook(self):
         self.roundtrip("flag", "brainfuck")
@@ -106,6 +117,11 @@ class TestCtfCodecs(TestCase):
                  "003000300030003000300030004400340039003400380034003400350032003000300030003000300030003400370030"
                  "00300030003000300030003800300038003000320030003000300030")
         self.assertTrue(codecs.decode(guide, "sms-pdu").startswith("89504E470D0A1A0A"))
+        gsm7 = self.roundtrip("flag{GSM7^€}", "sms-pdu-gsm7-13800138000")
+        self.assertIn("00", gsm7)
+        multipart = codecs.encode("A" * 170, "sms-pdu-gsm7-13800138000")
+        self.assertEqual(len(multipart.splitlines()), 2)
+        self.assertEqual(codecs.decode("\n".join(reversed(multipart.splitlines())), "sms-pdu-batch"), "A" * 170)
 
     def test_differential_manchester(self):
         self.assertEqual(self.roundtrip("A", "differential-manchester"), "1001010101010110")
@@ -116,8 +132,70 @@ class TestCtfCodecs(TestCase):
         encoded = self.roundtrip("flag{SNOW}", "snow")
         self.assertIn("\t", encoded)
         self.roundtrip("this is a compressed flag", "snow-compressed")
+        self.roundtrip("flag{SNOW_PASSWORD}", "snow-compressed-p-h70617373")
 
     def test_whitespace_language(self):
         encoded = self.roundtrip("flag{ws}", "whitespace-lang")
         self.assertEqual(set(encoded), {" ", "\t", "\n"})
         self.roundtrip("flag", "whitespace")
+        program = "   \n" + "\t\n\t " + "   \n" + "\t\t\t" + "\t\n  " + "\n\n\n"
+        self.assertEqual(codext.run_whitespace(program, b"A"), b"A")
+        self.assertEqual(codecs.decode(program, "whitespace-lang-input-h41"), "A")
+
+    def test_rc4_des_aes(self):
+        rc4 = "VWap58FvOtV1VNlmdcyKiaNVhPsWQRFYqt/duezhcddcVXmz5zhQyoc7"
+        self.assertEqual(codecs.decode(rc4, "rc4-h3230323530363036-b64"),
+                         "flag{edb99a94-f84d-e175-8a7d-e7f658789447}")
+        aes = "aes-ecb-h000102030405060708090a0b0c0d0e0f-hex-none"
+        self.assertEqual(codecs.encode(bytes.fromhex("00112233445566778899aabbccddeeff"), aes),
+                         b"69c4e0d86a7b0430d8cdb78070b4c55a")
+        self.assertEqual(codecs.decode("69c4e0d86a7b0430d8cdb78070b4c55a", aes),
+                         bytes.fromhex("00112233445566778899aabbccddeeff").decode("latin-1"))
+        self.roundtrip("flag{DES}", "des-cbc-h3132333435363738-h3132333435363738-b64-pkcs7")
+        self.roundtrip("flag{3DES}", "3des-ecb-h31323334353637386162636465666768-b64-pkcs7")
+
+    def test_sm_series(self):
+        self.assertEqual(codecs.encode("abc", "sm3"),
+                         "66c7f0f462eeedd9d1f2d46bdc10e4e24167c4875cf2f7a2297da02b8f4ba8e0")
+        vector = "sm4-ecb-h0123456789abcdeffedcba9876543210-hex-none"
+        self.assertEqual(codecs.encode(bytes.fromhex("0123456789abcdeffedcba9876543210"), vector),
+                         b"681edf34d206965e86b3e94f536e4246")
+        private_key, public_key = codext.generate_sm2_keypair()
+        codext.add_sm2_codec("sm2-test", private_key, public_key)
+        self.roundtrip("flag{SM2}", "sm2-test")
+
+    def test_rabbit_and_emoji_aes(self):
+        rabbit = "rabbit-h000102030405060708090a0b0c0d0e0f-h1011121314151617-hex"
+        self.assertEqual(codecs.encode(bytes.fromhex("000102030405060708090a0b0c0d0e0f"), rabbit),
+                         b"637b9392d8a9514c5f6aca776eb4bef7")
+        self.roundtrip("flag{rabbit-pbe}", "rabbit-pbe-h70617373776f7264")
+        cryptojs = "U2FsdGVkX18c9MGq6/oPxxMSsCNS4T3KdigW1XPUZrs="
+        emoji = "".join(dict(zip(BASE64_ALPHABET, EMOJIS))[char] for char in cryptojs)
+        self.assertEqual(codecs.decode(emoji, "emoji-aes-h7468317369734b6579"), "flag{emoji}")
+        self.roundtrip("flag{emoji-aes}", "emoji-aes-h7468317369734b6579")
+
+    def test_adfgx_and_substitution_tools(self):
+        self.roundtrip("attackatonce", "adfgx-german")
+        self.roundtrip("attackat1200", "adfgvx-german")
+        key = "phqgiumeaylnofdxkrcvstzwbj"
+        self.roundtrip("flag", "substitution-h" + key.encode().hex())
+        report = json.loads(codecs.decode("AAA bb c", "frequency-analysis"))
+        self.assertEqual(report["letters"][0], {"char": "a", "count": 3, "percent": 50.0})
+
+    def test_keyboard_and_chinese_niche(self):
+        self.assertEqual(codecs.encode("QAZIJCV", "keyboard-coordinates"), "11 21 31 18 27 33 34")
+        self.assertEqual(codecs.decode("11 21 31 18 27 33 34", "keyboard-coordinates"), "qazijcv")
+        self.assertEqual(codecs.decode("999 666 88 2 777 33 888 33 777 999 4 666 666 3", "phone-t9"),
+                         "youareverygood")
+        self.roundtrip("DASCTF", "dvorak")
+        self.assertEqual(codecs.decode("王夫 井工 夫口 由中人 井中 夫夫 由中大", "pawnshop"),
+                         "67 84 70 123 82 77 125")
+        self.roundtrip("flag{}", "chinese-strokes")
+
+    def test_vbe_and_twitter_secret(self):
+        vbe = "#@~^HAAAAA==W^lLyPb/P@#@&4*.2{W!!x[mFC&|0AcAAA==^#~@"
+        self.assertEqual(codecs.decode(vbe, "vbe"), "flag2 is \r\nh4V3_f0und_7H3_")
+        cover = "This is ordinary cover text with enough ASCII characters. " * 4
+        hidden = codext.hide_twitter_secret(cover, "flag test")
+        self.assertEqual(codext.reveal_twitter_secret(hidden), "flag test")
+        self.assertNotEqual(hidden, cover)

@@ -90,11 +90,12 @@ def _parse(program):
     return instructions
 
 
-def whitespace_lang_decode(text, errors="strict"):
-    instructions = _parse(ensure_str(text))
+def run_whitespace(program, input_data=b""):
+    instructions = _parse(ensure_str(program))
     labels = {value: index for index, (name, value) in enumerate(instructions) if name == "label"}
     stack, calls, heap, output = [], [], {}, bytearray()
-    cursor, steps = 0, 0
+    input_data = bytearray(input_data.encode() if isinstance(input_data, str) else input_data)
+    cursor, input_cursor, steps = 0, 0, 0
     while cursor < len(instructions):
         steps += 1
         if steps > 1_000_000:
@@ -150,10 +151,31 @@ def whitespace_lang_decode(text, errors="strict"):
             output.append(stack.pop() % 256)
         elif name == "outnum":
             output.extend(str(stack.pop()).encode())
-        elif name in ("readchar", "readnum"):
-            heap[stack.pop()] = -1
-    return bytes(output), len(ensure_str(text))
+        elif name == "readchar":
+            heap[stack.pop()] = input_data[input_cursor] if input_cursor < len(input_data) else -1
+            input_cursor += input_cursor < len(input_data)
+        elif name == "readnum":
+            end = input_data.find(b"\n", input_cursor)
+            end = len(input_data) if end < 0 else end
+            raw = bytes(input_data[input_cursor:end]).strip()
+            heap[stack.pop()] = int(raw) if raw else -1
+            input_cursor = min(end + 1, len(input_data))
+    return bytes(output)
+
+
+def whitespace_lang_decode(text, errors="strict"):
+    return run_whitespace(text), len(ensure_str(text))
+
+
+def whitespace_input_decode(input_data=""):
+    data = bytes.fromhex(str(input_data)[1:])
+    def decode(text, errors="strict"):
+        return run_whitespace(text, data), len(ensure_str(text))
+    return decode
 
 
 add("whitespace_lang", whitespace_lang_encode, whitespace_lang_decode,
     r"^(?:whitespace[-_]?(?:lang|language|esolang|program)|ws[-_]?lang)$", aliases=["whitespace-lang"])
+add("whitespace_lang_input", None, whitespace_input_decode,
+    r"^(?:whitespace[-_]?(?:lang|language)|ws[-_]?lang)[-_]input[-_](h[0-9a-fA-F]*)$",
+    aliases=["whitespace-lang-input"])
