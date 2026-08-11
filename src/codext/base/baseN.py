@@ -114,6 +114,20 @@ main64 = main(64, "RFC 4648")
 main64url = main(64, "RFC 4648 / Base64URL", "url", False)
 
 
+def add_custom_base64(alphabet, name="base64-custom"):
+    """Register a Base64 codec backed by a caller-supplied 64-character alphabet."""
+    if not isinstance(alphabet, str) or len(alphabet) != 64:
+        raise ValueError("Base64 alphabet must contain exactly 64 characters")
+    if len(set(alphabet)) != 64:
+        raise ValueError("Base64 alphabet characters must be unique")
+    if "=" in alphabet or any(char.isspace() for char in alphabet):
+        raise ValueError("Base64 alphabet cannot contain padding or whitespace characters")
+    if not isinstance(name, str) or not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", name):
+        raise ValueError("Bad custom Base64 codec name")
+    base2n(alphabet, r"^(%s)$" % re.escape(name), name=name, padding_char="=", guess=[])
+    return name
+
+
 B67 = {
     r'':                 upper + lower + digits + "-_.!~",
     r'[-_]inv(erted)?$': lower + upper + digits + "-_.!~",

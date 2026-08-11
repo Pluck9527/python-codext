@@ -21,6 +21,9 @@ list = list_encodings  # not included in __all__ because of shadow name
 
 reset()
 
+from .base.baseN import add_custom_base64
+__all__.append("add_custom_base64")
+
 
 # populate codext with attributes from codecs that were not modified
 for attr in codecs.__all__:
