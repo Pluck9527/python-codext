@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
-"""SMS PDU codecs with GSM-7, UCS-2, UDH multipart and batch support."""
+"""SMS PDU codecs with GSM-7, 8-bit, UCS-2, ports, UDH multipart and status reports."""
+import json
 import re
 
 from ..__common__ import add, ensure_str
@@ -77,6 +78,15 @@ def _udh_metadata(header):
             result.update(reference=value[0], total=value[1], part=value[2])
         if identifier == 8 and size == 4:
             result.update(reference=int.from_bytes(value[:2], "big"), total=value[2], part=value[3])
+        if identifier == 4 and size == 2:
+            result.update(destination_port=value[0], source_port=value[1])
+        if identifier == 5 and size == 4:
+            result.update(destination_port=int.from_bytes(value[:2], "big"),
+                          source_port=int.from_bytes(value[2:], "big"))
+        if identifier == 0x24 and size == 1:
+            result["national_single_shift"] = value[0]
+        if identifier == 0x25 and size == 1:
+            result["national_locking_shift"] = value[0]
     return result
 
 
@@ -115,8 +125,18 @@ def _parse_pdu(text, errors="strict"):
         pid, dcs = data[offset], data[offset + 1]
         offset += 2
         offset += 7
+    elif mti == 2:
+        reference = data[offset]
+        offset += 1
+        length, toa = data[offset], data[offset + 1]
+        offset += 2
+        address, offset = _read_numeric_address(data, offset, length)
+        address = ("+" if toa & 0x90 == 0x90 else "") + address
+        submitted, discharged, status = data[offset:offset + 7], data[offset + 7:offset + 14], data[offset + 14]
+        return {"text": "", "address": address, "mti": mti, "reference": reference, "status": status,
+                "submitted_at": submitted.hex().upper(), "discharged_at": discharged.hex().upper()}
     else:
-        raise ValueError("only SMS-SUBMIT and SMS-DELIVER PDUs are supported")
+        raise ValueError("only SMS-SUBMIT, SMS-DELIVER and SMS-STATUS-REPORT PDUs are supported")
     user_length, payload = data[offset], data[offset + 1:]
     header, multipart = b"", {}
     if first & 0x40:
@@ -135,7 +155,8 @@ def _parse_pdu(text, errors="strict"):
 def _chunks(text, alphabet, limit):
     chunks, current, used = [], "", 0
     for char in text:
-        width = len(_gsm7_values(char)) if alphabet == "gsm7" else len(char.encode("utf-16-be")) // 2
+        width = len(_gsm7_values(char)) if alphabet == "gsm7" else len(char.encode("latin-1")) if alphabet == "8bit" \
+            else len(char.encode("utf-16-be")) // 2
         if current and used + width > limit:
             chunks.append(current)
             current, used = "", 0
@@ -146,7 +167,7 @@ def _chunks(text, alphabet, limit):
     return chunks
 
 
-def sms_pdu_encode(alphabet="", destination=""):
+def sms_pdu_encode(alphabet="", destination="", reference_bits=8, source_port=None, destination_port=None):
     destination = str(destination or "10086")
     alphabet = str(alphabet or "ucs2").lower()
 
@@ -155,16 +176,33 @@ def sms_pdu_encode(alphabet="", destination=""):
         number = destination.lstrip("+")
         if not number.isdigit():
             raise ValueError("SMS PDU destination must contain decimal digits")
-        single_limit, multipart_limit = (160, 153) if alphabet == "gsm7" else (70, 67)
+        if alphabet not in ("gsm7", "8bit", "ucs2"):
+            raise ValueError("SMS PDU alphabet must be gsm7, 8bit or ucs2")
+        single_limit, multipart_limit = ((160, 153) if alphabet == "gsm7" else
+                                         (140, 134) if alphabet == "8bit" else (70, 67))
+        port_ie = (b"\x05\x04" + int(destination_port).to_bytes(2, "big") + int(source_port or 0).to_bytes(2, "big")
+                   if destination_port is not None else b"")
+        if port_ie:
+            overhead = len(port_ie) + 1
+            single_limit = (140 - overhead) * 8 // 7 if alphabet == "gsm7" else \
+                140 - overhead if alphabet == "8bit" else (140 - overhead) // 2
         chunks = _chunks(message, alphabet, single_limit)
         if len(chunks) == 1:
             chunks = _chunks(message, alphabet, single_limit)
         else:
+            concat_size = 7 if int(reference_bits) == 16 else 6
+            overhead = concat_size + len(port_ie)
+            multipart_limit = (140 - overhead) * 8 // 7 if alphabet == "gsm7" else \
+                140 - overhead if alphabet == "8bit" else (140 - overhead) // 2
             chunks = _chunks(message, alphabet, multipart_limit)
-        reference = sum(message.encode("utf-8")) & 0xff
+        reference = sum(message.encode("utf-8")) & (0xffff if int(reference_bits) == 16 else 0xff)
         result = []
         for part, chunk in enumerate(chunks, 1):
-            header = bytes((5, 0, 3, reference, len(chunks), part)) if len(chunks) > 1 else b""
+            concat = (b"\x08\x04" + reference.to_bytes(2, "big") + bytes((len(chunks), part)) if
+                      len(chunks) > 1 and int(reference_bits) == 16 else
+                      bytes((0, 3, reference, len(chunks), part)) if len(chunks) > 1 else b"")
+            elements = concat + port_ie
+            header = bytes((len(elements),)) + elements if elements else b""
             first = 0x41 if header else 0x01
             pdu = "00%02X00%02X%s%s00" % (first, len(number), "91" if destination.startswith("+") else "81",
                                            _semi_octets(destination))
@@ -172,6 +210,9 @@ def sms_pdu_encode(alphabet="", destination=""):
                 payload, header_septets = _pack_gsm7(_gsm7_values(chunk), header)
                 user_length = header_septets + len(_gsm7_values(chunk))
                 pdu += "00%02X%s" % (user_length, payload.hex().upper())
+            elif alphabet == "8bit":
+                payload = header + chunk.encode("latin-1", errors)
+                pdu += "04%02X%s" % (len(payload), payload.hex().upper())
             else:
                 payload = header + chunk.encode("utf-16-be", errors)
                 pdu += "08%02X%s" % (len(payload), payload.hex().upper())
@@ -197,7 +238,20 @@ def sms_pdu_batch_decode(text, errors="strict"):
     return "".join(record["text"] for record in records), len(value)
 
 
+def parse_sms_pdu(text, errors="strict"):
+    return _parse_pdu(text, errors)
+
+
+def sms_pdu_info_decode(text, errors="strict"):
+    source = ensure_str(text)
+    records = [_parse_pdu(line, errors) for line in source.splitlines() if line.strip()]
+    result = json.dumps(records[0] if len(records) == 1 else records, ensure_ascii=False, indent=2)
+    return result, len(source)
+
+
 add("sms_pdu", sms_pdu_encode, sms_pdu_decode_factory,
-    r"^(?:sms[-_]?pdu|pdu[-_]?sms)(?:[-_](gsm7))?(?:[-_]([0-9]+))?$", aliases=["sms-pdu"])
+    r"^(?:sms[-_]?pdu|pdu[-_]?sms)(?:[-_](gsm7|8bit|ucs2))?(?:[-_]([0-9]+))?$", aliases=["sms-pdu"])
 add("sms_pdu_batch", None, sms_pdu_batch_decode,
     r"^(?:sms[-_]?pdu[-_]?(?:batch|multipart)|pdu[-_]?multipart)$", aliases=["sms-pdu-batch"])
+add("sms_pdu_info", None, sms_pdu_info_decode, r"^(?:sms[-_]?pdu|pdu[-_]?sms)[-_](?:info|json)$",
+    aliases=["sms-pdu-info"])

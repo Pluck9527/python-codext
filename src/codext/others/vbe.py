@@ -1,6 +1,8 @@
 # -*- coding: UTF-8 -*-
-"""Microsoft Script Encoder VBE decoder."""
+"""Microsoft Script Encoder VBE encoder and decoder."""
+import base64
 import re
+import struct
 
 from ..__common__ import add, ensure_str
 
@@ -22,6 +24,32 @@ def decode_vbe_payload(data):
     return "".join(result)
 
 
+def encode_vbe_payload(data):
+    result = []
+    reverse = [{DECODE_TABLE[(value - 9) * 3 + combination]: chr(value)
+                for value in range(9, 128) if value not in (60, 62, 64)} for combination in range(3)]
+    escapes = {"\n": "@&", "\r": "@#", ">": "@*", "<": "@!", "@": "@$"}
+    for index, char in enumerate(data):
+        value = ord(char)
+        if char in escapes:
+            result.append(escapes[char])
+            continue
+        if (value == 9 or 31 < value < 128) and char in reverse[COMBINATION[index % 64]]:
+            result.append(reverse[COMBINATION[index % 64]][char])
+            continue
+        result.append(char)
+    return "".join(result)
+
+
+def vbe_encode(text, errors="strict"):
+    source = ensure_str(text)
+    payload = encode_vbe_payload(source)
+    length = base64.b64encode(struct.pack("<I", len(payload))).decode()
+    checksum = base64.b64encode(struct.pack("<I", sum(map(ord, source)) & 0xffffffff)).decode()
+    result = "#@~^" + length + payload + checksum + "^#~@"
+    return result, len(source)
+
+
 def vbe_decode(text, errors="strict"):
     source = ensure_str(text)
     matches = re.findall(r"#@~\^......==(.+?)......==\^#~@", source, re.DOTALL)
@@ -31,4 +59,4 @@ def vbe_decode(text, errors="strict"):
     return result, len(source)
 
 
-add("vbe", None, vbe_decode, r"^(?:vbe|vbs[-_]encoded|script[-_]encoder)$")
+add("vbe", vbe_encode, vbe_decode, r"^(?:vbe|vbs[-_]encoded|script[-_]encoder)$")

@@ -4,6 +4,7 @@ import json
 import math
 import random
 from collections import Counter
+from pathlib import Path
 from string import ascii_lowercase, ascii_uppercase
 
 from ..__common__ import add, ensure_str
@@ -16,6 +17,21 @@ COMMON = {
     "tha": 2.8, "nth": 2.7, "was": 2.6, "eth": 2.5, "for": 2.5, "dth": 2.2, "thei": 6.0,
     "tion": 5.8, "that": 5.5, "ther": 5.3, "with": 5.0, "here": 4.7, "ould": 4.5, "ight": 4.4,
 }
+
+
+def _load_quadgrams():
+    counts = {}
+    for line in Path(__file__).with_name("english_quadgrams.txt").read_text().splitlines():
+        if not line or line.startswith("#"):
+            continue
+        token, count = line.split()
+        counts[token.lower()] = int(count)
+    total = sum(counts.values())
+    floor = math.log10(.05 / total)
+    return {token: math.log10(count / total) for token, count in counts.items()}, floor
+
+
+QUADGRAMS, QUADGRAM_FLOOR = _load_quadgrams()
 
 
 def frequency_report(text):
@@ -38,14 +54,17 @@ def _translate(text, key):
 
 def _score(text):
     lower = text.lower()
-    score = sum(lower.count(token) * weight for token, weight in COMMON.items())
+    letters = "".join(char for char in lower if char in ascii_lowercase)
+    score = sum(QUADGRAMS.get(letters[index:index + 4], QUADGRAM_FLOOR)
+                for index in range(max(0, len(letters) - 3)))
+    score += sum(lower.count(token) * weight for token, weight in COMMON.items())
     score += sum(lower.count(" " + word + " ") * 6 for word in
                  ("the", "and", "this", "that", "is", "of", "to", "in", "for", "flag"))
     score -= sum(lower.count(token) * 2 for token in ("qz", "jq", "qj", "zx", "vvv", "jj"))
     return score
 
 
-def solve_substitution(text, restarts=24, iterations=3000):
+def solve_substitution(text, restarts=24, iterations=3500, seed=0):
     """Return the best deterministic hill-climbed cipher-to-plain alphabet."""
     source = ensure_str(text)
     counts = Counter(char.lower() for char in source if char.lower() in ascii_lowercase)
@@ -54,7 +73,7 @@ def solve_substitution(text, restarts=24, iterations=3000):
     initial = [""] * 26
     for cipher, plain in zip(ranked, ENGLISH_ORDER):
         initial[ord(cipher) - 97] = plain
-    randomizer = random.Random(source)
+    randomizer = random.Random(source + "\0" + str(seed))
     best_key, best_text = "".join(initial), _translate(source, "".join(initial))
     best_score = _score(best_text)
     for restart in range(max(1, int(restarts))):
@@ -74,6 +93,15 @@ def solve_substitution(text, restarts=24, iterations=3000):
                 key[left], key[right] = key[right], key[left]
             temperature = max(0.15, temperature * 0.998)
     return {"text": best_text, "key": best_key, "score": round(best_score, 3)}
+
+
+def solve_substitution_candidates(text, limit=10, restarts=40, iterations=3500):
+    """Return independently seeded candidates, ranked by English quadgrams."""
+    source = ensure_str(text)
+    candidates = [solve_substitution(source, max(1, restarts // max(1, limit)), iterations, seed)
+                  for seed in range(max(1, int(limit)))]
+    unique = {candidate["text"]: candidate for candidate in candidates}
+    return sorted(unique.values(), key=lambda candidate: candidate["score"], reverse=True)[:limit]
 
 
 def frequency_decode(text, errors="strict"):

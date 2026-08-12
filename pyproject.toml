@@ -26,6 +26,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+  "gmalg>=1.1.1",
   "gmssl>=3.2.2",
   "legacycrypt; python_version >= '3.13'",
   "markdown2>=2.5.4",
@@ -82,4 +83,4 @@ codext = "codext.__init__:main"
 unbase = "codext.base.__init__:main"
 
 [tool.setuptools.package-data]
-codext = ["VERSION.txt", "macros.json", "others/pgp_word_list.json"]
+codext = ["VERSION.txt", "macros.json", "others/pgp_word_list.json", "crypto/english_quadgrams.txt"]

@@ -33,26 +33,39 @@ def gronsfeld_decode(key=""):
 
 
 def _hill_factory(key, decode=False):
-    values = [int(value) for value in (key or "3,3,2,5").split(",")]
-    if len(values) != 4:
-        raise LookupError("Bad parameter for encoding 'hill': a 2x2 key needs four integers")
-    a, b_, c, d = values
-    determinant = (a * d - b_ * c) % 26
+    source = key or "3,3,2,5"
+    values = ([int(value) for value in source.split(",")] if "," in source else
+              [ord(char) - 65 for char in source.upper() if char in ascii_uppercase])
+    dimension = int(len(values) ** .5)
+    if dimension < 2 or dimension * dimension != len(values):
+        raise LookupError("Bad parameter for encoding 'hill': key must form a square matrix")
+    matrix = [values[index:index + dimension] for index in range(0, len(values), dimension)]
+
+    def determinant(value):
+        if len(value) == 1:
+            return value[0][0]
+        return sum((-1) ** column * value[0][column] * determinant(
+            [row[:column] + row[column + 1:] for row in value[1:]]) for column in range(len(value)))
+
+    det = determinant(matrix) % 26
     try:
-        inverse = pow(determinant, -1, 26)
+        inverse = pow(det, -1, 26)
     except ValueError as error:
         raise LookupError("Bad parameter for encoding 'hill': matrix is not invertible modulo 26") from error
     if decode:
-        a, b_, c, d = d * inverse, -b_ * inverse, -c * inverse, a * inverse
+        matrix = [[((-1) ** (row + column) * determinant(
+            [line[:row] + line[row + 1:] for index, line in enumerate(matrix) if index != column]) * inverse) % 26
+                   for column in range(dimension)] for row in range(dimension)]
 
     def code(text, errors="strict"):
         letters = [char for char in ensure_str(text).upper() if char in ascii_uppercase]
-        if len(letters) % 2:
+        while len(letters) % dimension:
             letters.append("X")
         result = []
-        for index in range(0, len(letters), 2):
-            x, y = ord(letters[index]) - 65, ord(letters[index + 1]) - 65
-            result.extend((chr((a * x + b_ * y) % 26 + 65), chr((c * x + d * y) % 26 + 65)))
+        for index in range(0, len(letters), dimension):
+            block = [ord(char) - 65 for char in letters[index:index + dimension]]
+            result.extend(chr(sum(matrix[row][column] * block[column] for column in range(dimension)) % 26 + 65)
+                          for row in range(dimension))
         return (output := "".join(result)), len(output)
     return code
 
@@ -97,6 +110,9 @@ def cloud_shadow_decode(text, errors="strict"):
 
 
 add("gronsfeld", gronsfeld_encode, gronsfeld_decode, r"^gronsfeld(?:[-_]cipher)?(?:[-_]([0-9]+))?$")
-add("hill", hill_encode, hill_decode, r"^hill(?:[-_]cipher)?(?:[-_]([0-9-]+(?:,[0-9-]+){3}))?$")
+add("hill", hill_encode, hill_decode,
+    r"^hill(?:[-_]cipher)?(?:[-_]((?:[a-zA-Z]{4}|[a-zA-Z]{9}|[a-zA-Z]{16}|[a-zA-Z]{25}|[a-zA-Z]{36})|"
+    r"(?:[0-9-]+(?:,[0-9-]+){3}|[0-9-]+(?:,[0-9-]+){8}|[0-9-]+(?:,[0-9-]+){15}|"
+    r"[0-9-]+(?:,[0-9-]+){24}|[0-9-]+(?:,[0-9-]+){35})))?$")
 add("cloud_shadow", cloud_shadow_encode, cloud_shadow_decode, r"^(?:cloud[-_]?shadow|yunying)$",
     aliases=["cloud-shadow", "yunying"])

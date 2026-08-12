@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """Regression tests for the CTF-oriented codecs."""
+import base64
 import json
 from unittest import TestCase
 
@@ -29,7 +30,11 @@ class TestCtfCodecs(TestCase):
 
     def test_base64_stego_decode(self):
         self.assertEqual(codecs.decode("QU==\nQR==", "base64-stego"), "A")
-        self.assertRaises(NotImplementedError, codecs.encode, "A", "base64-stego")
+        self.roundtrip("flag{padding_bits}", "base64-stego")
+        carriers = "QQ==\nQg=="
+        hidden = codext.hide_base64_padding(carriers, "A")
+        self.assertEqual(codecs.decode(hidden, "base64-stego"), "A")
+        self.assertEqual([base64.b64decode(line) for line in hidden.splitlines()], [b"A", b"B"])
 
     def test_zero_width(self):
         self.roundtrip("flag{零宽}", "zero-width")
@@ -38,6 +43,8 @@ class TestCtfCodecs(TestCase):
         self.assertEqual(codecs.encode("HELP", "hill-3,3,2,5"), "HIAT")
         self.assertEqual(codecs.decode("HIAT", "hill-3,3,2,5"), "HELP")
         self.assertRaises(LookupError, codecs.encode, "HELP", "hill-2,4,2,4")
+        self.assertEqual(codecs.encode("ACT", "hill-GYBNQKURP"), "POH")
+        self.assertEqual(codecs.decode("POH", "hill-GYBNQKURP"), "ACT")
 
     def test_gronsfeld(self):
         self.assertEqual(self.roundtrip("HELLO", "gronsfeld-31415"), "KFPMT")
@@ -75,6 +82,20 @@ class TestCtfCodecs(TestCase):
         self.assertEqual(self.roundtrip("HELLOWORLD", "enigma"), "ILBDAAMTAZ")
         encoding = "enigma-iv.ii.i-c-lfp-hrq-hr.qp.fz.sw.eu"
         self.assertEqual(self.roundtrip("HELLOWORLD", encoding), "CTTOJBSHRV")
+
+    def test_classical_key_recovery(self):
+        self.assertEqual(codext.recover_vigenere_key("ATTACKATDAWN", "LXFOPVEFRNHR"), "LEMON")
+        plaintext = ("THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG AND THIS MESSAGE CONTAINS ENOUGH COMMON ENGLISH "
+                     "WORDS TO RECOVER THE SECRET VIGENERE KEY WITH FREQUENCY ANALYSIS ") * 3
+        ciphertext = codecs.encode(plaintext, "vigenere-lemon")
+        self.assertEqual(codext.crack_vigenere(ciphertext, 12)[0]["key"], "LEMON")
+        self.assertEqual(json.loads(codecs.decode(ciphertext, "crack-vigenere"))[0]["key"], "LEMON")
+        self.assertEqual(codext.recover_hill_key("HELP", "HIAT", 2), [[3, 3], [2, 5]])
+        hill_plain = "THISISALONGERENGLISHTEXTWITHCOMMONWORDSANDPATTERNSFORHILLCRACKINGTESTDATA"
+        hill_cipher = codecs.encode(hill_plain, "hill-3,3,2,5")
+        self.assertEqual(codext.crack_hill(hill_cipher, limit=1)[0]["key"], [[3, 3], [2, 5]])
+        result = codext.crack_enigma("ILBDAAMTAZ", "HELLO", reflectors=("B",), limit=1)[0]
+        self.assertEqual((result["positions"], result["text"]), ("AAA", "HELLOWORLD"))
 
     def test_quoted_printable_and_unicode_escape(self):
         self.assertEqual(self.roundtrip("flag{中文}", "quoted-printable"),
@@ -122,6 +143,16 @@ class TestCtfCodecs(TestCase):
         multipart = codecs.encode("A" * 170, "sms-pdu-gsm7-13800138000")
         self.assertEqual(len(multipart.splitlines()), 2)
         self.assertEqual(codecs.decode("\n".join(reversed(multipart.splitlines())), "sms-pdu-batch"), "A" * 170)
+        eight_bit = codecs.encode("flag\xff", "sms-pdu-8bit-13800138000")
+        self.assertEqual(codecs.decode(eight_bit, "sms-pdu"), "flag\xff")
+        port_pdu = codext.sms_pdu_encode("8bit", "13800138000", 16, 9200, 2948)("flag")[0]
+        self.assertEqual(codext.parse_sms_pdu(port_pdu)["destination_port"], 2948)
+        multipart_16 = codext.sms_pdu_encode("8bit", "13800138000", 16)("A" * 300)[0]
+        records = [codext.parse_sms_pdu(line) for line in multipart_16.splitlines()]
+        self.assertEqual([record["part"] for record in records], [1, 2, 3])
+        self.assertGreater(records[0]["reference"], 0)
+        status = "0002010B913108108300F0421020000000004210200000000000"
+        self.assertEqual(codext.parse_sms_pdu(status)["status"], 0)
 
     def test_differential_manchester(self):
         self.assertEqual(self.roundtrip("A", "differential-manchester"), "1001010101010110")
@@ -163,6 +194,14 @@ class TestCtfCodecs(TestCase):
         private_key, public_key = codext.generate_sm2_keypair()
         codext.add_sm2_codec("sm2-test", private_key, public_key)
         self.roundtrip("flag{SM2}", "sm2-test")
+        signing_key, verify_key = codext.generate_sm2_signing_keypair()
+        signature = codext.sm2_sign("flag{SM2_SIGN}", signing_key)
+        self.assertTrue(codext.sm2_verify("flag{SM2_SIGN}", signature, verify_key))
+        self.assertFalse(codext.sm2_verify("tampered", signature, verify_key))
+        _, master_public, user_key = codext.generate_sm9_signing_keys("alice@example.com")
+        signature = codext.sm9_sign("flag{SM9}", "alice@example.com", master_public, user_key)
+        self.assertTrue(codext.sm9_verify("flag{SM9}", signature, "alice@example.com", master_public))
+        self.assertFalse(codext.sm9_verify("tampered", signature, "alice@example.com", master_public))
 
     def test_rabbit_and_emoji_aes(self):
         rabbit = "rabbit-h000102030405060708090a0b0c0d0e0f-h1011121314151617-hex"
@@ -181,6 +220,10 @@ class TestCtfCodecs(TestCase):
         self.roundtrip("flag", "substitution-h" + key.encode().hex())
         report = json.loads(codecs.decode("AAA bb c", "frequency-analysis"))
         self.assertEqual(report["letters"][0], {"char": "a", "count": 3, "percent": 50.0})
+        plaintext = ("this is a longer english message that contains common words and repeated patterns. "
+                     "the substitution solver should recover readable text from enough ciphertext. ") * 2
+        cipher = plaintext.translate(str.maketrans("abcdefghijklmnopqrstuvwxyz", key))
+        self.assertTrue(codext.solve_substitution(cipher, 12, 2500)["text"].startswith("this is a longer english"))
 
     def test_keyboard_and_chinese_niche(self):
         self.assertEqual(codecs.encode("QAZIJCV", "keyboard-coordinates"), "11 21 31 18 27 33 34")
@@ -188,6 +231,8 @@ class TestCtfCodecs(TestCase):
         self.assertEqual(codecs.decode("999 666 88 2 777 33 888 33 777 999 4 666 666 3", "phone-t9"),
                          "youareverygood")
         self.roundtrip("DASCTF", "dvorak")
+        self.assertEqual(self.roundtrip("asdf", "keyboard-shift-right"), "sdfg")
+        self.assertEqual(codecs.encode("qaz", "keyboard-shift-down"), "azz")
         self.assertEqual(codecs.decode("王夫 井工 夫口 由中人 井中 夫夫 由中大", "pawnshop"),
                          "67 84 70 123 82 77 125")
         self.roundtrip("flag{}", "chinese-strokes")
@@ -195,6 +240,9 @@ class TestCtfCodecs(TestCase):
     def test_vbe_and_twitter_secret(self):
         vbe = "#@~^HAAAAA==W^lLyPb/P@#@&4*.2{W!!x[mFC&|0AcAAA==^#~@"
         self.assertEqual(codecs.decode(vbe, "vbe"), "flag2 is \r\nh4V3_f0und_7H3_")
+        self.assertEqual(codecs.encode("flag2 is \r\nh4V3_f0und_7H3_", "vbe"), vbe)
+        self.roundtrip("flag{VBE_ENCODE}", "vbe")
+        self.roundtrip("flag{离线垃圾邮件隐写}", "spammimic")
         cover = "This is ordinary cover text with enough ASCII characters. " * 4
         hidden = codext.hide_twitter_secret(cover, "flag test")
         self.assertEqual(codext.reveal_twitter_secret(hidden), "flag test")

@@ -7,10 +7,10 @@ This fork adds codecs required by the Chinese CTF Misc workflow while preserving
 | Base92 | `base92` | Compatible with thenoviceoof/base92; `flag` encodes to `F#S<I`. |
 | Base2048 | `base2048` | Uses qntm's Base2048 repertoire. |
 | Base65536 | `base65536`, `base65535` | Uses qntm's repertoire; `base65535` is a guide-compatible alias. |
-| Base64 padding steganography | `base64-stego` | Decode-only because encoding requires independent carrier lines. |
+| Base64 padding steganography | `base64-stego`, `hide_base64_padding(...)` | Round-trip generated carriers plus caller-supplied Base64 carrier lines; decoded carrier bytes remain unchanged. |
 | Custom-alphabet Base64 | `add_custom_base64(alphabet, name)` | Registers a named codec from exactly 64 unique non-padding, non-whitespace characters. |
 | Zero-width steganography | `zero-width` | U+200B/U+200C bits separated by U+200D. |
-| Hill | `hill-3,3,2,5` | 2x2 matrix key encoded in the codec name. |
+| Hill | `hill-3,3,2,5`, `hill-GYBNQKURP` | Any invertible square matrix from 2x2 through 6x6, supplied as integers or letters. |
 | Gronsfeld | `gronsfeld-31415` | Numeric repeating key. |
 | Vigenere arbitrary key | `vigenere-key-h687474703a2f2f...`, `add_vigenere_codec(...)` | Hex parameter/runtime registration accepts URL keys; punctuation is ignored and ASCII letters form the key stream. |
 | Cloud shadow | `cloud-shadow` | Also registered as `yunying`. |
@@ -26,22 +26,23 @@ This fork adds codecs required by the Chinese CTF Misc workflow while preserving
 | Brainfuck / Ook! | `brainfuck`, `ook`, `short-ook` | Bounded interpreter, bracket validation and standard/short Ook token pairs. |
 | AAEncode | `aaencode` | Emits executable AAEncoded JavaScript and decodes it without evaluating JavaScript. |
 | Decabit | `decabit` | Complete 0-126 ten-pulse table; `DECA` matches the guide example. |
-| SMS PDU | `sms-pdu[-DESTINATION]`, `sms-pdu-gsm7-DESTINATION`, `sms-pdu-batch` | SMS-SUBMIT/DELIVER, numeric/alphanumeric addresses, GSM-7 extensions, UCS-2 and UDH multipart reassembly. |
+| SMS PDU | `sms-pdu[-DESTINATION]`, `sms-pdu-gsm7-DESTINATION`, `sms-pdu-8bit-DESTINATION`, `sms-pdu-info` | SUBMIT/DELIVER/status-report, GSM-7/8-bit/UCS-2, 8/16-bit concatenation, application ports, national-shift UDH metadata and multipart reassembly. |
 | Differential Manchester | `differential-manchester[-inverted]` | Start-of-bit rule plus mandatory mid-bit transition validation. |
 | SNOW whitespace steganography | `snow`, `snow-compressed`, `snow-compressed-p-h70617373` | stegsnow-compatible bit order, `-C` Huffman and `-p` ICE-CFB password mode. |
 | Whitespace language | `whitespace-lang`, `whitespace-lang-input-h41` | Bounded interpreter with stack, arithmetic, heap, flow-control and byte/number input. |
 | AES / DES / 3DES | `aes-cbc-hKEY-hIV-b64-pkcs7` | ECB/CBC, hex/Base64, PKCS#7/zero/no padding; keys and IVs use hex parameters. |
 | RC4 | `rc4-hKEY-b64` | Keyed RC4 with hex or Base64 ciphertext. |
-| SM2 / SM3 / SM4 | `sm3`, `sm4-ecb-hKEY-hex-none`, `add_sm2_codec(...)` | SM3 hash, SM4 ECB/CBC and runtime SM2 public/private key registration. |
+| SM2 / SM3 / SM4 / SM9 | `sm3`, `sm4-ecb-hKEY-hex-none`, `add_sm2_codec(...)` | SM3, SM4, SM2 encryption plus SM2 and identity-based SM9 key generation, signing and verification helpers/codecs. |
 | Rabbit | `rabbit-hKEY-hIV-hex`, `rabbit-pbe-hPASSWORD` | Raw Rabbit plus CryptoJS/OpenSSL `Salted__` passphrase envelopes. |
 | Emoji-AES | `emoji-aes-hPASSWORD[-ROTATION]` | Compatible with the original CryptoJS Emoji-AES alphabet and optional rotation. |
 | ADFGX / ADFGVX | `adfgx-german`, `adfgvx-german` | Guide default squares; optional custom square as `h<UTF-8-hex>`. |
-| Substitution analysis | `frequency-analysis`, `quipqiup`, `substitution-hALPHABET` | JSON statistics, offline hill-climbing and explicit monoalphabetic keys. |
-| Keyboard encodings | `keyboard-coordinates`, `phone-t9`, `dvorak`, `qwertz`, `azerty`, `colemak` | PC coordinates, phone multi-tap and physical-layout conversion. |
+| Substitution analysis | `frequency-analysis`, `quipqiup`, `substitution-hALPHABET` | English quadgram simulated annealing, ranked local candidates and explicit monoalphabetic keys; no service call. |
+| Key recovery | `crack-vigenere`, `hill-crack`, `hill-recover-3`, `enigma-crack[-CRIB]` | Vigenere frequency recovery, exhaustive 2x2 Hill, known-plaintext NxN Hill and bounded Enigma rotor-position search. |
+| Keyboard encodings | `keyboard-coordinates`, `phone-t9`, `keyboard-shift-up-left`, `dvorak`, `qwertz`, `azerty`, `colemak` | Coordinates, multi-tap, eight physical directions with optional wrapping and layout conversion. |
 | Chinese niche encodings | `pinyin-tone`, `pawnshop`, `chinese-strokes` | Tone-derived ASCII, pawnshop digits and the guide's 1-12 stroke table. |
-| VBE | `vbe` | Microsoft Script Encoder decoder; extracts one or more `#@~^...^#~@` blocks without execution. |
+| VBE | `vbe` | Microsoft Script Encoder-compatible encoding and multi-block decoding without script execution. |
 | Twitter Secret Messages | `twitter-secret` | Compatible Unicode homoglyph steganography; helpers accept separate cover and secret strings. |
-| Spammimic | `spammimic-online` | Explicit fixed-host adapter for the proprietary official grammar; invoked on demand and bounded to 64 KiB. |
+| Spammimic | `spammimic`, `spammimic-online` | Deterministic UTF-8/CRC-protected offline spam cover; the separately named online adapter remains for the official proprietary grammar. |
 
 ```python
 import codext
@@ -51,7 +52,7 @@ codext.add_custom_base64(alphabet, "base64-ctf")
 plaintext = codext.decode("i5qMi/==", "base64-ctf")
 ```
 
-All codecs work through `codext.encode`, `codext.decode`, the CLI registry and codec chains. Base64 padding steganography is intentionally one-way. Chinese Telegraph Code uses Mainland/Taiwan codebooks derived from Unicode Unihan mappings.
+All codecs work through `codext.encode`, `codext.decode`, the CLI registry and codec chains. Chinese Telegraph Code uses Mainland/Taiwan codebooks derived from Unicode Unihan mappings.
 
 Examples for the new CTF batch:
 
@@ -73,8 +74,16 @@ assert codext.decode(codext.encode("flag{AES}", aes), aes) == "flag{AES}"
 
 hidden = codext.hide_twitter_secret("This is a sufficiently long ASCII cover. " * 4, "flag-test")
 assert codext.reveal_twitter_secret(hidden) == "flag-test"
+
+private_key, public_key = codext.generate_sm2_signing_keypair()
+signature = codext.sm2_sign("flag{SM2}", private_key)
+assert codext.sm2_verify("flag{SM2}", signature, public_key)
+
+master_secret, master_public, user_key = codext.generate_sm9_signing_keys("alice@example.com")
+signature = codext.sm9_sign("flag{SM9}", "alice@example.com", master_public, user_key)
+assert codext.sm9_verify("flag{SM9}", signature, "alice@example.com", master_public)
 ```
 
 `snow-compressed` corresponds to SNOW's `-C` mode. Password-bearing names append `-p-h<password bytes in hex>`. `whitespace-lang` executes at most 1,000,000 instructions; the plain codec supplies an empty input channel and the `-input-h...` form supplies exact input bytes. Dynamic crypto parameters deliberately use `h<hex>` so URLs, punctuation and binary keys remain unambiguous.
 
-Sources: thenoviceoof/base92 (MIT), qntm/base2048 and qntm/base65536 (MIT), the PGPfone word list, zhtelecode 0.1.0 (MIT), the original AAEncode implementation, dCode's Decabit table, stegsnow's Apache-2.0 whitespace/Huffman/ICE implementation, CryptoJS Rabbit/AES formats, the Emoji-AES project, Didier Stevens' public-domain VBE decoder and Twitter Secret Messages' published homoglyph table.
+Sources: thenoviceoof/base92 (MIT), qntm/base2048 and qntm/base65536 (MIT), the PGPfone word list, zhtelecode 0.1.0 (MIT), gmalg (MIT), 3GPP TS 23.038/23.040, the original AAEncode implementation, dCode's Decabit table, stegsnow's Apache-2.0 whitespace/Huffman/ICE implementation, CryptoJS Rabbit/AES formats, the Emoji-AES project, Didier Stevens' public-domain VBE decoder and Twitter Secret Messages' published homoglyph table. The local English quadgram model is derived from Project Gutenberg eBook 11, which is public domain in the United States.

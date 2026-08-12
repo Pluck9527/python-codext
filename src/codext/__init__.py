@@ -26,14 +26,25 @@ __all__.append("add_custom_base64")
 
 from .crypto.modern import add_symmetric_codec
 from .crypto.keyed_vigenere import add_vigenere_codec
-from .crypto.sm import add_sm2_codec, generate_sm2_keypair
-from .crypto.substitution import frequency_report, solve_substitution
+from .crypto.sm import (add_sm2_codec, add_sm2_signature_codec, add_sm9_signature_codec, generate_sm2_keypair,
+                        generate_sm2_signing_keypair, generate_sm9_signing_keys, sm2_sign, sm2_verify, sm9_sign,
+                        sm9_verify)
+from .crypto.substitution import frequency_report, solve_substitution, solve_substitution_candidates
+from .crypto.analysis import crack_enigma, crack_hill, crack_vigenere, recover_hill_key, recover_vigenere_key
 from .stegano.twitter_secret import hide_twitter_secret, reveal_twitter_secret
+from .stegano.base64_stego import hide_base64_padding
+from .stegano.spammimic import spammimic_decode, spammimic_encode
 from .stegano.whitespace_lang import run_whitespace
-from .others.vbe import decode_vbe_payload
-__all__.extend(["add_symmetric_codec", "add_vigenere_codec", "add_sm2_codec", "generate_sm2_keypair", "frequency_report",
-                "solve_substitution", "hide_twitter_secret", "reveal_twitter_secret", "run_whitespace",
-                "decode_vbe_payload"])
+from .others.sms_pdu import parse_sms_pdu, sms_pdu_encode
+from .others.vbe import decode_vbe_payload, encode_vbe_payload
+__all__.extend(["add_symmetric_codec", "add_vigenere_codec", "add_sm2_codec", "add_sm2_signature_codec",
+                "add_sm9_signature_codec", "generate_sm2_keypair", "generate_sm2_signing_keypair",
+                "generate_sm9_signing_keys", "sm2_sign", "sm2_verify", "sm9_sign", "sm9_verify",
+                "frequency_report", "solve_substitution", "solve_substitution_candidates", "crack_enigma",
+                "crack_hill", "crack_vigenere", "recover_hill_key", "recover_vigenere_key", "hide_twitter_secret",
+                "reveal_twitter_secret", "hide_base64_padding", "spammimic_encode", "spammimic_decode",
+                "run_whitespace", "parse_sms_pdu", "sms_pdu_encode", "decode_vbe_payload",
+                "encode_vbe_payload"])
 
 
 # populate codext with attributes from codecs that were not modified

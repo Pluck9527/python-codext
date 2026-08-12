@@ -23,3 +23,4 @@ from . import emoji_aes
 from . import adfgx
 from . import substitution
 from . import keyed_vigenere
+from . import analysis
