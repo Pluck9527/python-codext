@@ -14,3 +14,13 @@ from .shift import *
 from .vic import *
 from .vigenere import *
 from .xor import *
+from .ctf_classical import *
+from .enigma import *
+from . import modern
+from . import sm
+from . import rabbit
+from . import emoji_aes
+from . import adfgx
+from . import substitution
+from . import keyed_vigenere
+from . import analysis

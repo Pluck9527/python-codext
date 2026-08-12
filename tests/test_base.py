@@ -4,8 +4,10 @@
 
 """
 import sys
+from string import ascii_lowercase, ascii_uppercase, digits
 from unittest import TestCase
 
+import codext
 from codext.__common__ import *
 from codext.base._base import _generate_charset
 from codext.base.baseN import base, main2, main32, main64url
@@ -217,6 +219,18 @@ class TestCodecsBase(TestCase):
             self.assertEqual(codecs.encode(b(STR), enc), b(b64))
             self.assertEqual(codecs.decode(b64, enc), STR)
             self.assertEqual(codecs.decode(b(b64), enc), b(STR))
+
+    def test_codec_base64_custom_alphabet(self):
+        alphabet = (ascii_uppercase + ascii_lowercase + digits + "+/")[::-1]
+        self.assertEqual(codext.add_custom_base64(alphabet), "base64-custom")
+        self.assertEqual(codecs.encode("test", "base64-custom"), "i5qMi/==")
+        self.assertEqual(codecs.decode("i5qMi/==", "base64-custom"), "test")
+        self.assertEqual(codecs.decode(codecs.encode(b("\x00\xff"), "base64-custom"), "base64-custom"), b("\x00\xff"))
+        self.assertEqual(codext.add_custom_base64(alphabet, "base64-ctf"), "base64-ctf")
+        self.assertEqual(codecs.decode(codecs.encode(STR, "base64-ctf"), "base64-ctf"), STR)
+        for invalid in [alphabet[:-1], alphabet[:-1] + alphabet[0], alphabet[:-1] + "=", alphabet[:-1] + "\n"]:
+            self.assertRaises(ValueError, codext.add_custom_base64, invalid)
+        self.assertRaises(ValueError, codext.add_custom_base64, alphabet, "bad codec!")
     
     def test_codec_base91(self):
         for b91, enc in zip([",X,<:WRT%yxth90oZB", ",N,<:MHJ%onjXzqeP1", "Jx&[jv4S3Wg>,71@Jk", "yJy^\\IDFsdc?Tof:L#"],

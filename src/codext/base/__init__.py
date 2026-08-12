@@ -5,8 +5,10 @@ from types import MethodType
 from .base45 import *
 from .base85 import *
 from .base91 import *
+from .base92 import *
 from .base100 import *
 from .base122 import *
+from .unicode_bases import *
 from .baseN import *
 from ..__common__ import *
 from ..__info__ import __version__
