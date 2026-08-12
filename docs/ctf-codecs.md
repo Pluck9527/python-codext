@@ -5,13 +5,16 @@ This fork adds codecs required by the Chinese CTF Misc workflow while preserving
 | Codec | Example name | Notes |
 |---|---|---|
 | Base92 | `base92` | Compatible with thenoviceoof/base92; `flag` encodes to `F#S<I`. |
+| Base1024 / Ecoji | `base1024`, `ecoji` | Apache-licensed Ecoji Base1024 repertoire; `flag` encodes to `👪😑🌟🙋`. |
 | Base2048 | `base2048` | Uses qntm's Base2048 repertoire. |
 | Base65536 | `base65536`, `base65535` | Uses qntm's repertoire; `base65535` is a guide-compatible alias. |
 | Base64 padding steganography | `base64-stego`, `hide_base64_padding(...)` | Round-trip generated carriers plus caller-supplied Base64 carrier lines; decoded carrier bytes remain unchanged. |
 | Custom-alphabet Base64 | `add_custom_base64(alphabet, name)` | Registers a named codec from exactly 64 unique non-padding, non-whitespace characters. |
+| MD5 CTF helpers | `md5-16[-upper]`, `md5-upper`, `crack-md5` | 16/32-character case variants plus built-in or caller-supplied dictionary lookup through `crack_md5(...)`. |
 | Zero-width steganography | `zero-width` | U+200B/U+200C bits separated by U+200D. |
 | Hill | `hill-3,3,2,5`, `hill-GYBNQKURP` | Any invertible square matrix from 2x2 through 6x6, supplied as integers or letters. |
 | Gronsfeld | `gronsfeld-31415` | Numeric repeating key. |
+| Music symbols | `music-symbol` | Offline CTF music-symbol mapping with its `§=` terminator. |
 | Vigenere arbitrary key | `vigenere-key-h687474703a2f2f...`, `add_vigenere_codec(...)` | Hex parameter/runtime registration accepts URL keys; punctuation is ignored and ASCII letters form the key stream. |
 | Cloud shadow | `cloud-shadow` | Also registered as `yunying`. |
 | XXencode | `xxencode` | Binary-to-text encoding with 45-byte lines. |
@@ -26,6 +29,7 @@ This fork adds codecs required by the Chinese CTF Misc workflow while preserving
 | Brainfuck / Ook! | `brainfuck`, `ook`, `short-ook` | Bounded interpreter, bracket validation and standard/short Ook token pairs. |
 | AAEncode | `aaencode` | Emits executable AAEncoded JavaScript and decodes it without evaluating JavaScript. |
 | Decabit | `decabit` | Complete 0-126 ten-pulse table; `DECA` matches the guide example. |
+| DNA | `dna1` through `dna8`, `dna-triplet` | Eight complementary-pairing maps plus the guide's three-nucleotide 63-character table. |
 | SMS PDU | `sms-pdu[-DESTINATION]`, `sms-pdu-gsm7-DESTINATION`, `sms-pdu-8bit-DESTINATION`, `sms-pdu-info` | SUBMIT/DELIVER/status-report, GSM-7/8-bit/UCS-2, 8/16-bit concatenation, application ports, national-shift UDH metadata and multipart reassembly. |
 | Differential Manchester | `differential-manchester[-inverted]` | Start-of-bit rule plus mandatory mid-bit transition validation. |
 | SNOW whitespace steganography | `snow`, `snow-compressed`, `snow-compressed-p-h70617373` | stegsnow-compatible bit order, `-C` Huffman and `-p` ICE-CFB password mode. |
@@ -38,7 +42,9 @@ This fork adds codecs required by the Chinese CTF Misc workflow while preserving
 | ADFGX / ADFGVX | `adfgx-german`, `adfgvx-german` | Guide default squares; optional custom square as `h<UTF-8-hex>`. |
 | Substitution analysis | `frequency-analysis`, `quipqiup`, `substitution-hALPHABET` | English quadgram simulated annealing, ranked local candidates and explicit monoalphabetic keys; no service call. |
 | Key recovery | `crack-vigenere`, `hill-crack`, `hill-recover-3`, `enigma-crack[-CRIB]` | Vigenere frequency recovery, exhaustive 2x2 Hill, known-plaintext NxN Hill and bounded Enigma rotor-position search. |
-| Keyboard encodings | `keyboard-coordinates`, `phone-t9`, `keyboard-shift-up-left`, `dvorak`, `qwertz`, `azerty`, `colemak` | Coordinates, multi-tap, eight physical directions with optional wrapping and layout conversion. |
+| Keyboard encodings | `keyboard-coordinates`, `keyboard-qwe`, `keyboard-symbol-shift`, `phone-26`, `phone-t9-coordinate` | Coordinates, QWE remapping, repeated-symbol vertical movement, 26-key conversion and both T9 token conventions. |
+| Numeric tap code | `tap-numeric` | Accepts and emits guide-style `5,2 3,1 ...` row/column pairs. |
+| Chinese ASCII | `chinese-ascii`, `unicode-decimal` | Decimal Unicode code points and decimal/hex HTML entities. |
 | Chinese niche encodings | `pinyin-tone`, `pawnshop`, `chinese-strokes` | Tone-derived ASCII, pawnshop digits and the guide's 1-12 stroke table. |
 | VBE | `vbe` | Microsoft Script Encoder-compatible encoding and multi-block decoding without script execution. |
 | Twitter Secret Messages | `twitter-secret` | Compatible Unicode homoglyph steganography; helpers accept separate cover and secret strings. |
@@ -75,6 +81,10 @@ assert codext.decode(codext.encode("flag{AES}", aes), aes) == "flag{AES}"
 hidden = codext.hide_twitter_secret("This is a sufficiently long ASCII cover. " * 4, "flag-test")
 assert codext.reveal_twitter_secret(hidden) == "flag-test"
 
+assert codext.decode("5,2 3,1 3,1 3,2", "tap-numeric") == "wllm"
+assert codext.decode("ooo yyy ii", "phone-26") == "you"
+assert codext.decode("20013 25991", "chinese-ascii") == "中文"
+
 private_key, public_key = codext.generate_sm2_signing_keypair()
 signature = codext.sm2_sign("flag{SM2}", private_key)
 assert codext.sm2_verify("flag{SM2}", signature, public_key)
@@ -86,4 +96,4 @@ assert codext.sm9_verify("flag{SM9}", signature, "alice@example.com", master_pub
 
 `snow-compressed` corresponds to SNOW's `-C` mode. Password-bearing names append `-p-h<password bytes in hex>`. `whitespace-lang` executes at most 1,000,000 instructions; the plain codec supplies an empty input channel and the `-input-h...` form supplies exact input bytes. Dynamic crypto parameters deliberately use `h<hex>` so URLs, punctuation and binary keys remain unambiguous.
 
-Sources: thenoviceoof/base92 (MIT), qntm/base2048 and qntm/base65536 (MIT), the PGPfone word list, zhtelecode 0.1.0 (MIT), gmalg (MIT), 3GPP TS 23.038/23.040, the original AAEncode implementation, dCode's Decabit table, stegsnow's Apache-2.0 whitespace/Huffman/ICE implementation, CryptoJS Rabbit/AES formats, the Emoji-AES project, Didier Stevens' public-domain VBE decoder and Twitter Secret Messages' published homoglyph table. The local English quadgram model is derived from Project Gutenberg eBook 11, which is public domain in the United States.
+Sources: thenoviceoof/base92 (MIT), Ecoji (Apache-2.0), qntm/base2048 and qntm/base65536 (MIT), the PGPfone word list, zhtelecode 0.1.0 (MIT), gmalg (MIT), 3GPP TS 23.038/23.040, the original AAEncode implementation, Ascetics/ctfkit's reverse-engineered CTF music map, dCode's Decabit table, stegsnow's Apache-2.0 whitespace/Huffman/ICE implementation, CryptoJS Rabbit/AES formats, the Emoji-AES project, Didier Stevens' public-domain VBE decoder and Twitter Secret Messages' published homoglyph table. The local English quadgram model is derived from Project Gutenberg eBook 11, which is public domain in the United States.

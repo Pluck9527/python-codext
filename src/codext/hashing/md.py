@@ -52,8 +52,55 @@ def md2(data):
     return "".join("{:02x}".format(x) for x in digest[:16])
 
 
+DEFAULT_MD5_WORDS = (
+    "admin", "password", "123456", "12345678", "123456789", "1234567890", "qwerty", "abc123", "111111",
+    "123123", "000000", "iloveyou", "dragon", "monkey", "letmein", "welcome", "root", "toor", "test",
+    "guest", "flag", "ctf", "admin123", "password1", "1q2w3e4r", "qwerty123",
+)
+
+
+def _md5_format_factory(length="", case=""):
+    def encode(text, errors="strict"):
+        result = hashlib.md5(b(text)).hexdigest()
+        result = result[8:24] if str(length) == "16" else result
+        result = result.upper() if case == "upper" else result.lower()
+        return result, len(b(text))
+    return encode
+
+
+def md5_format_encode(length="", case="", standalone_case=""):
+    return _md5_format_factory(length, case or standalone_case)
+
+
+def crack_md5(digest, candidates=None):
+    """Return the first candidate matching a 16- or 32-character MD5 digest."""
+    target = ensure_str(digest).strip().lower()
+    if not re.fullmatch(r"(?:[0-9a-f]{16}|[0-9a-f]{32})", target):
+        raise ValueError("MD5 digest must contain 16 or 32 hexadecimal characters")
+    words = DEFAULT_MD5_WORDS if candidates is None else candidates
+    for candidate in words:
+        source = ensure_str(candidate).rstrip("\r\n")
+        value = hashlib.md5(b(source)).hexdigest()
+        if value == target or value[8:24] == target:
+            return source
+    return None
+
+
+def md5_crack_decode(text, errors="strict"):
+    source = ensure_str(text)
+    lines = source.splitlines()
+    if not lines:
+        raise ValueError("MD5 cracking input is empty")
+    result = crack_md5(lines[0], lines[1:] or None)
+    if result is None:
+        raise ValueError("MD5 digest was not found in the supplied dictionary")
+    return result, len(source)
+
+
 add("md2", lambda s, error="strict": (md2(s), len(s)), guess=None)
 add("md5", lambda s, error="strict": (hashlib.new("md5", b(s)).hexdigest(), len(s)), guess=None)
+add("md5_format", md5_format_encode, None,
+    r"^(?:md5[-_](16)(?:[-_](upper|lower))?|md5[-_](upper|lower)|md5[-_]format)$", guess=None)
+add("crack_md5", None, md5_crack_decode, r"^(?:crack[-_]?md5|md5[-_]crack)$", guess=None)
 if "md4" in hashlib.algorithms_available:
     add("md4", lambda s, error="strict": (hashlib.new("md4", b(s)).hexdigest(), len(s)), guess=None)
-

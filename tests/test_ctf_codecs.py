@@ -24,9 +24,22 @@ class TestCtfCodecs(TestCase):
     def test_base2048(self):
         self.assertEqual(self.roundtrip("flag", "base2048"), "ڥڊװ")
 
+    def test_base1024_ecoji(self):
+        self.assertEqual(self.roundtrip("flag", "base1024"), "👪😑🌟🙋")
+        self.assertEqual(codecs.decode("👲🔩🚗🌷", "ecoji"), "hello")
+
     def test_base65536_and_guide_alias(self):
         self.assertEqual(self.roundtrip("flag", "base65536"), "ꍦ鱡")
         self.assertEqual(codecs.decode("ꍦ鱡", "base65535"), "flag")
+
+    def test_md5_ctf_formats_and_dictionary(self):
+        self.assertEqual(codecs.encode("admin", "md5-16"), "7a57a5a743894a0e")
+        self.assertEqual(codecs.encode("admin", "md5-16-upper"), "7A57A5A743894A0E")
+        self.assertEqual(codecs.encode("admin", "md5-upper"), "21232F297A57A5A743894A0E4A801FC3")
+        self.assertEqual(codecs.decode("21232f297a57a5a743894a0e4a801fc3", "crack-md5"), "admin")
+        digest = codecs.encode("custom-word", "md5")
+        self.assertEqual(codecs.decode(digest + "\nnope\ncustom-word", "crack-md5"), "custom-word")
+        self.assertEqual(codext.crack_md5(digest, ["first", "custom-word"]), "custom-word")
 
     def test_base64_stego_decode(self):
         self.assertEqual(codecs.decode("QU==\nQR==", "base64-stego"), "A")
@@ -120,6 +133,18 @@ class TestCtfCodecs(TestCase):
         self.roundtrip("flag", "short-ook")
         self.assertEqual(codecs.decode("+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++.", "brainfuck"), "A")
         self.assertEqual(codecs.decode(",.", "brainfuck"), "\x00")
+
+    def test_text_ctf_guide_variants(self):
+        music = ("♭♯♪‖¶♬♭♭♪♭‖‖♭♭♬‖♫♪‖♩♬‖♬♬♭♭♫‖♩♫‖♬♪♭♭♭‖¶∮‖‖‖‖♩♬‖♬♪‖♩♫"
+                 "♭♭♭♭♭§‖♩♩♭♭♫♭♭♭‖♬♭‖¶§♭♭♯‖♫∮‖♬¶‖¶∮‖♬♫‖♫♬‖♫♫§=")
+        self.assertEqual(codecs.decode(music, "music-symbol"), "MRCTF{thEse_n0tes_ArE_am@zing~}")
+        self.roundtrip("flag{Music_1!}", "music-symbol")
+        self.assertEqual(self.roundtrip("中文A", "chinese-ascii"), "20013 25991 65")
+        self.assertEqual(codecs.decode("&#20013;&#25991;&#65;", "chinese-ascii"), "中文A")
+        self.assertEqual(codecs.decode("5,2 3,1 3,1 3,2", "tap-numeric"), "wllm")
+        self.roundtrip("flag test", "tap-numeric")
+        self.assertEqual(codecs.decode("TCATCAACAAAT", "dna-triplet"), "11ed")
+        self.roundtrip("flag DNA 10", "dna-triplet")
 
     def test_aaencode(self):
         encoded = self.roundtrip("console.log('中文😀')", "aaencode")
@@ -233,6 +258,18 @@ class TestCtfCodecs(TestCase):
         self.roundtrip("DASCTF", "dvorak")
         self.assertEqual(self.roundtrip("asdf", "keyboard-shift-right"), "sdfg")
         self.assertEqual(codecs.encode("qaz", "keyboard-shift-down"), "azz")
+        self.assertEqual(codecs.decode("tewatnolzsarffuykjydyayd", "keyboard-qwe"),
+                         "ecbkeyistlkdnngfrqfmfkfm")
+        self.roundtrip("ecbkey", "keyboard-qwe")
+        symbols = "&&&* &&&!! %%%!! @@^^* %%# ^^!!( ##* $$!!^^^%%"
+        self.assertEqual(codecs.decode(symbols, "keyboard-symbol-shift"), "mi ma ba shi ge hao di fang")
+        self.assertEqual(codecs.encode("mi ma ba shi ge hao di fang", "keyboard-symbol-shift"), symbols)
+        self.assertEqual(self.roundtrip("qaz", "keyboard-symbol-shift"), "!·!!·!!!")
+        phone = "ooo yyy ii w uuu ee iii ee uuu ooo r yyy yyy e"
+        self.assertEqual(codecs.decode(phone, "phone-26"), "youareverygood")
+        self.assertEqual(codecs.encode("youareverygood", "phone-26"), phone)
+        self.assertEqual(codecs.decode("82 73 42 31 22 31 33 41 32", "phone-t9-coordinate"), "urhdbdfge")
+        self.roundtrip("coordinate", "phone-t9-coordinate")
         self.assertEqual(codecs.decode("王夫 井工 夫口 由中人 井中 夫夫 由中大", "pawnshop"),
                          "67 84 70 123 82 77 125")
         self.roundtrip("flag{}", "chinese-strokes")

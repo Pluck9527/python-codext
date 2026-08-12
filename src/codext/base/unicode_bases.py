@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 """Base2048 and Base65536 Unicode codecs using qntm repertoires."""
+import io
 from functools import lru_cache
 
 from ..__common__ import *
@@ -70,5 +71,24 @@ def _make(bits_per_char, name):
     return encode, decode
 
 
+def base1024_encode(text, errors="strict"):
+    import ecoji
+
+    reader, writer = io.BytesIO(b(text)), io.StringIO()
+    ecoji.encode(reader, writer, wrap=-1)
+    result = writer.getvalue().rstrip("\n")
+    return result, len(result)
+
+
+def base1024_decode(text, errors="strict"):
+    import ecoji
+
+    source, writer = ensure_str(text).strip(), io.BytesIO()
+    ecoji.decode(io.StringIO(source), writer)
+    return writer.getvalue(), len(source)
+
+
+add("base1024", base1024_encode, base1024_decode, r"^(?:base[-_]?1024|ecoji)$", aliases=["ecoji"],
+    expansion_factor=.8)
 add("base2048", *_make(11, "base2048"), r"^base[-_]?2048$", expansion_factor=.75)
 add("base65536", *_make(16, "base65536"), r"^base[-_]?(?:65535|65536)$", aliases=["base65535"], expansion_factor=.5)

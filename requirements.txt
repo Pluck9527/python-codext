@@ -4,3 +4,4 @@ gmssl>=3.2.2
 pycryptodome>=3.23
 pypinyin>=0.55
 gmalg>=1.1.1
+ecoji==0.1.1

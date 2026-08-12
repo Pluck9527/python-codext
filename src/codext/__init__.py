@@ -22,7 +22,9 @@ list = list_encodings  # not included in __all__ because of shadow name
 reset()
 
 from .base.baseN import add_custom_base64
+from .hashing.md import crack_md5
 __all__.append("add_custom_base64")
+__all__.append("crack_md5")
 
 from .crypto.modern import add_symmetric_codec
 from .crypto.keyed_vigenere import add_vigenere_codec

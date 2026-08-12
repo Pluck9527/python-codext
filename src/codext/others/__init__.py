@@ -16,3 +16,4 @@ from . import sms_pdu
 from . import keyboards
 from . import chinese_niche
 from . import vbe
+from . import ctf_text
